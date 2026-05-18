@@ -13,3 +13,10 @@ __pycache__/
 
 # Mac files
 .DS_Store
+
+# ChromaDB files
+chroma/
+vector_store/
+
+# Generated reports
+report.md
