@@ -67,7 +67,8 @@ const users = new Map([['admin', 'nexus123']]);
       });
 
       if (!response.ok) {
-        throw new Error(`Python backend error: ${response.statusText}`);
+        const errBody = await response.text();
+        throw new Error(`Python backend error (${response.status}): ${errBody || response.statusText}`);
       }
 
       const data = await response.json();
@@ -95,7 +96,7 @@ const users = new Map([['admin', 'nexus123']]);
         });
 
         const result = await genAI.models.generateContent({
-          model: 'gemini-3-flash-preview',
+          model: 'gemini-2.0-flash',
           contents,
           config: {
             systemInstruction,
@@ -106,7 +107,9 @@ const users = new Map([['admin', 'nexus123']]);
         res.json({ text: result.text });
       } catch (geminiError: any) {
         console.error('Gemini Fallback Error:', geminiError);
-        res.status(500).json({ error: 'Failed to generate research response' });
+        res.status(500).json({ 
+          error: `Python backend unavailable and Gemini fallback also failed. Python error: ${error?.message || error}. Gemini error: ${geminiError?.message || geminiError}` 
+        });
       }
     }
   });

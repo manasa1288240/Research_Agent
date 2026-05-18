@@ -63,10 +63,19 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({ user, lang
       });
 
       const data = await response.json();
+
+      let responseText: string;
+      if (data.text) {
+        responseText = data.text;
+      } else if (data.error) {
+        responseText = `⚠️ **Backend Error:** ${data.error}`;
+      } else {
+        responseText = "⚠️ System Error: No response from backend.";
+      }
       
       const assistantMessage: Message = {
         role: 'assistant',
-        text: data.text || "System Error: Unable to process request.",
+        text: responseText,
         agent: selectedAgent,
         timestamp: new Date(),
       };
@@ -74,6 +83,13 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({ user, lang
       setMessages(prev => [...prev, assistantMessage]);
     } catch (err) {
       console.error(err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        text: `⚠️ **Network Error:** Could not reach the backend. Make sure \`python app.py\` is running on port 5000.\n\nDetails: ${errMsg}`,
+        agent: selectedAgent,
+        timestamp: new Date(),
+      }]);
     } finally {
       setIsTyping(false);
     }

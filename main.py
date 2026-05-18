@@ -25,7 +25,7 @@ print("\nSearching the web...\n")
 results = tavily.search(
     query=query,
     search_depth="advanced",
-    max_results=5
+    max_results=10
 )
 
 # Store web search results into memory
@@ -43,6 +43,8 @@ relevant_docs = retrieve_relevant(query)
 
 # Combine retrieved documents
 retrieved_context = "\n".join(relevant_docs)
+print("\n===== RETRIEVED CONTEXT =====\n")
+print(retrieved_context)
 
 print("Retrieving relevant information...\n")
 
@@ -50,18 +52,18 @@ print("Retrieving relevant information...\n")
 prompt = f"""
 You are an elite AI research analyst.
 
-Using the provided research sources, create a professional research report.
+Your task is to generate a detailed, professional, deeply researched report.
 
-REQUIREMENTS:
-- Use clear markdown formatting
-- Include headings
-- Include bullet points
-- Be factual and concise
-- Mention important trends
-- Mention risks/challenges
-- Mention future implications
+IMPORTANT:
+- Be highly detailed
+- Use markdown formatting
+- Explain concepts thoroughly
+- Include trends, risks, opportunities, and future implications
+- Use bullet points where useful
+- Write like a professional research paper summary
+- Use ALL provided research context
 
-FORMAT:
+OUTPUT FORMAT:
 
 # Title
 
@@ -69,18 +71,22 @@ FORMAT:
 
 ## Key Findings
 
-## Major Insights
+## Major Technological Trends
 
-## Challenges and Risks
+## Applications
+
+## Risks and Challenges
+
+## Industry Impact
 
 ## Future Outlook
 
 ## Final Conclusion
 
-Research Topic:
+USER QUERY:
 {query}
 
-Relevant Research Sources:
+RESEARCH CONTEXT:
 {retrieved_context}
 """
 

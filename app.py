@@ -5,6 +5,11 @@ from tavily import TavilyClient
 from openai import OpenAI
 from memory import store_documents, retrieve_relevant
 import os
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -12,13 +17,28 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-# Initialize clients
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY")
-)
+# Initialize clients with error handling
+try:
+    logger.info("Initializing OpenAI client...")
+    client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=os.getenv("OPENROUTER_API_KEY")
+    )
+    logger.info("✓ OpenAI client initialized")
+except Exception as e:
+    logger.error(f"Failed to initialize OpenAI client: {e}")
+    client = None
 
-tavily = TavilyClient()
+try:
+    logger.info("Initializing Tavily client...")
+    tavily_api_key = os.getenv("TAVILY_API_KEY")
+    if not tavily_api_key:
+        raise ValueError("TAVILY_API_KEY is not set in environment")
+    tavily = TavilyClient(api_key=tavily_api_key)
+    logger.info("✓ Tavily client initialized")
+except Exception as e:
+    logger.error(f"Failed to initialize Tavily client: {e}")
+    tavily = None
 
 # Store conversation history
 conversation_history = []
@@ -51,25 +71,35 @@ def chat():
         is_research_query = any(keyword in user_message.lower() 
                                for keyword in ['search', 'research', 'find', 'analyze', 'report', 'data', 'information'])
         
+        retrieved_context = ""
+        
+        if is_research_query and tavily:
+            try:
+                # Perform web search using Tavily
+                logger.info(f"Searching web for: {user_message}")
+                search_results = tavily.search(
+                    query=user_message,
+                    search_depth="advanced",
+                    max_results=5
+                )
+                
+                # Store search results into memory
+                documents = []
+                for result in search_results["results"]:
+                    documents.append(result["content"])
+                
+                store_documents(documents)
+                
+                # Retrieve most relevant documents
+                relevant_docs = retrieve_relevant(user_message)
+                retrieved_context = "\n".join(relevant_docs) if relevant_docs else ""
+                logger.info(f"Retrieved {len(relevant_docs)} relevant documents")
+                
+            except Exception as e:
+                logger.error(f"Web search error: {e}")
+                retrieved_context = ""
+        
         if is_research_query:
-            # Perform web search using Tavily
-            search_results = tavily.search(
-                query=user_message,
-                search_depth="advanced",
-                max_results=5
-            )
-            
-            # Store search results into memory
-            documents = []
-            for result in search_results["results"]:
-                documents.append(result["content"])
-            
-            store_documents(documents)
-            
-            # Retrieve most relevant documents
-            relevant_docs = retrieve_relevant(user_message)
-            retrieved_context = "\n".join(relevant_docs)
-            
             # Build comprehensive prompt
             prompt = f"""You are an elite AI research analyst working as the {agent} agent.
 Current Language: {language}
@@ -78,17 +108,17 @@ User Query:
 {user_message}
 
 Relevant Research Sources:
-{retrieved_context}
+{retrieved_context if retrieved_context else "No search results available. Please provide a general response based on your knowledge."}
 
-Please provide a comprehensive, well-structured response using the research sources.
+Please provide a comprehensive, well-structured response.
 Format your response with clear sections using markdown.
 Be factual, analytical, and professional.
 Include key findings, insights, and any relevant trends or implications."""
         
         else:
             # Regular conversation without research
-            retrieved_context = retrieve_relevant(user_message) if conversation_history else []
-            context_text = "\n".join(retrieved_context) if retrieved_context else "No previous context."
+            retrieved_context_list = retrieve_relevant(user_message) if conversation_history else []
+            context_text = "\n".join(retrieved_context_list) if retrieved_context_list else "No previous context."
             
             prompt = f"""You are the {agent} agent in a research assistant system.
 Current Language: {language}
@@ -99,32 +129,44 @@ User Message: {user_message}
 Provide a helpful, professional response."""
         
         # Get response from LLM
-        response = client.chat.completions.create(
-            model="openai/gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": f"You are the {agent} agent in a multi-agent research system. Respond in {language}."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=2000
-        )
-        
-        assistant_message = response.choices[0].message.content
-        
-        # Add to history
-        conversation_history.append({
-            "role": "assistant",
-            "content": assistant_message
-        })
-        
-        return jsonify({
-            "text": assistant_message,
-            "agent": agent,
-            "success": True
-        })
+        if not client:
+            return jsonify({"error": "LLM client not available", "success": False}), 503
+            
+        try:
+            logger.info(f"Calling LLM with agent: {agent}")
+            response = client.chat.completions.create(
+                model="openai/gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": f"You are the {agent} agent in a multi-agent research system. Respond in {language}."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=2000
+            )
+            
+            assistant_message = response.choices[0].message.content
+            
+            # Add to history
+            conversation_history.append({
+                "role": "assistant",
+                "content": assistant_message
+            })
+            
+            logger.info("LLM response generated successfully")
+            return jsonify({
+                "text": assistant_message,
+                "agent": agent,
+                "success": True
+            })
+        except Exception as llm_error:
+            logger.error(f"LLM Error: {llm_error}")
+            return jsonify({
+                "error": f"LLM Error: {str(llm_error)}", 
+                "success": False
+            }), 500
         
     except Exception as e:
-        print(f"Error in chat endpoint: {str(e)}")
+        logger.error(f"Error in chat endpoint: {str(e)}")
         return jsonify({"error": str(e), "success": False}), 500
 
 @app.route('/api/research', methods=['POST'])
@@ -137,26 +179,31 @@ def research():
         if not query:
             return jsonify({"error": "Query is required"}), 400
         
-        # Search the web
-        search_results = tavily.search(
-            query=query,
-            search_depth="advanced",
-            max_results=5
-        )
+        if not tavily:
+            return jsonify({"error": "Tavily search not available", "success": False}), 503
         
-        # Store documents
-        documents = []
-        for result in search_results["results"]:
-            documents.append(result["content"])
-        
-        store_documents(documents)
-        
-        # Retrieve relevant documents
-        relevant_docs = retrieve_relevant(query)
-        retrieved_context = "\n".join(relevant_docs)
-        
-        # Generate research report
-        prompt = f"""You are an elite AI research analyst.
+        try:
+            # Search the web
+            logger.info(f"Research query: {query}")
+            search_results = tavily.search(
+                query=query,
+                search_depth="advanced",
+                max_results=5
+            )
+            
+            # Store documents
+            documents = []
+            for result in search_results["results"]:
+                documents.append(result["content"])
+            
+            store_documents(documents)
+            
+            # Retrieve relevant documents
+            relevant_docs = retrieve_relevant(query)
+            retrieved_context = "\n".join(relevant_docs) if relevant_docs else "No search results available."
+            
+            # Generate research report
+            prompt = f"""You are an elite AI research analyst.
 
 Using the provided research sources, create a professional research report.
 
@@ -191,27 +238,34 @@ Research Topic:
 Relevant Research Sources:
 {retrieved_context}
 """
-        
-        response = client.chat.completions.create(
-            model="openai/gpt-3.5-turbo",
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=3000
-        )
-        
-        report = response.choices[0].message.content
-        
-        return jsonify({
-            "report": report,
-            "query": query,
-            "sources_count": len(documents),
-            "success": True
-        })
+            
+            if not client:
+                return jsonify({"error": "LLM not available", "success": False}), 503
+            
+            response = client.chat.completions.create(
+                model="openai/gpt-3.5-turbo",
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=3000
+            )
+            
+            report = response.choices[0].message.content
+            logger.info("Research report generated successfully")
+            
+            return jsonify({
+                "report": report,
+                "query": query,
+                "sources_count": len(documents),
+                "success": True
+            })
+        except Exception as search_error:
+            logger.error(f"Research processing error: {search_error}")
+            return jsonify({"error": str(search_error), "success": False}), 500
         
     except Exception as e:
-        print(f"Error in research endpoint: {str(e)}")
+        logger.error(f"Error in research endpoint: {str(e)}")
         return jsonify({"error": str(e), "success": False}), 500
 
 @app.route('/api/clear-history', methods=['POST'])
@@ -233,4 +287,12 @@ def get_agents():
     return jsonify(agents)
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    logger.info("=" * 50)
+    logger.info("Starting Research Agent Backend")
+    logger.info("=" * 50)
+    logger.info(f"OpenAI Client: {'✓ Ready' if client else '✗ Not available'}")
+    logger.info(f"Tavily Client: {'✓ Ready' if tavily else '✗ Not available'}")
+    logger.info("=" * 50)
+    logger.info("Running on http://localhost:5000")
+    logger.info("=" * 50)
+    app.run(debug=True, port=5000, host='0.0.0.0')
