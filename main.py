@@ -1,8 +1,10 @@
 from dotenv import load_dotenv
 from tavily import TavilyClient
 from openai import OpenAI
+from memory import store_documents, retrieve_relevant
 import os
 
+# Load environment variables
 load_dotenv()
 
 # OpenRouter client
@@ -11,50 +13,80 @@ client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY")
 )
 
-# Tavily search
+# Tavily search client
 tavily = TavilyClient()
 
+# User input
 query = input("Enter research topic: ")
 
 print("\nSearching the web...\n")
 
+# Search the web
 results = tavily.search(
     query=query,
     search_depth="advanced",
     max_results=5
 )
 
-context = ""
+# Store web search results into memory
+documents = []
 
-for idx, result in enumerate(results["results"], start=1):
-    context += f"""
-Source {idx}
-Title: {result['title']}
-Content: {result['content']}
-URL: {result['url']}
+for result in results["results"]:
+    documents.append(result["content"])
 
-"""
+store_documents(documents)
 
+print("Research stored into memory.\n")
+
+# Retrieve most relevant documents
+relevant_docs = retrieve_relevant(query)
+
+# Combine retrieved documents
+retrieved_context = "\n".join(relevant_docs)
+
+print("Retrieving relevant information...\n")
+
+# Prompt for LLM
 prompt = f"""
-You are an advanced AI research assistant.
+You are an elite AI research analyst.
 
-Using the following research:
+Using the provided research sources, create a professional research report.
 
-{context}
+REQUIREMENTS:
+- Use clear markdown formatting
+- Include headings
+- Include bullet points
+- Be factual and concise
+- Mention important trends
+- Mention risks/challenges
+- Mention future implications
 
-Generate:
-1. Key findings
-2. Important insights
-3. Challenges
-4. Future outlook
-5. Final summary
+FORMAT:
 
-Topic:
+# Title
+
+## Executive Summary
+
+## Key Findings
+
+## Major Insights
+
+## Challenges and Risks
+
+## Future Outlook
+
+## Final Conclusion
+
+Research Topic:
 {query}
+
+Relevant Research Sources:
+{retrieved_context}
 """
 
 print("Generating AI report...\n")
 
+# Generate response
 response = client.chat.completions.create(
     model="openai/gpt-oss-20b:free",
     messages=[
@@ -62,6 +94,15 @@ response = client.chat.completions.create(
     ]
 )
 
-print("\n===== AI RESEARCH REPORT =====\n")
+# Extract report
+report = response.choices[0].message.content
 
-print(response.choices[0].message.content)
+# Print report
+print("\n===== AI RESEARCH REPORT =====\n")
+print(report)
+
+# Save report
+with open("report.md", "w", encoding="utf-8") as f:
+    f.write(report)
+
+print("\nReport saved as report.md")
