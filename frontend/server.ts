@@ -26,8 +26,8 @@ async function startServer() {
     }
   });
 
-// In-memory user store for demo purposes
-const users = new Map([['admin', 'nexus123']]);
+  // In-memory user store for demo purposes
+  const users = new Map([['admin', 'nexus123']]);
 
   // API Routes
   app.post('/api/login', (req, res) => {
@@ -54,7 +54,7 @@ const users = new Map([['admin', 'nexus123']]);
     try {
       // Proxy to Python backend
       const pythonBackendUrl = process.env.PYTHON_BACKEND_URL || 'http://localhost:5000';
-      
+
       const response = await fetch(`${pythonBackendUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -75,7 +75,7 @@ const users = new Map([['admin', 'nexus123']]);
       res.json(data);
     } catch (error: any) {
       console.error('Chat Error:', error);
-      
+
       // Fallback to Gemini if Python backend is unavailable
       try {
         console.log('Falling back to Gemini...');
@@ -107,8 +107,8 @@ const users = new Map([['admin', 'nexus123']]);
         res.json({ text: result.text });
       } catch (geminiError: any) {
         console.error('Gemini Fallback Error:', geminiError);
-        res.status(500).json({ 
-          error: `Python backend unavailable and Gemini fallback also failed. Python error: ${error?.message || error}. Gemini error: ${geminiError?.message || geminiError}` 
+        res.status(500).json({
+          error: `Python backend unavailable and Gemini fallback also failed. Python error: ${error?.message || error}. Gemini error: ${geminiError?.message || geminiError}`
         });
       }
     }

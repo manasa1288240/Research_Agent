@@ -6,6 +6,9 @@ from openai import OpenAI
 from memory import store_documents, retrieve_relevant
 import os
 import logging
+import json
+import hashlib
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -16,6 +19,33 @@ load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+# User storage file path
+USERS_FILE = Path(__file__).parent / "frontend" / "users.json"
+
+def load_users():
+    """Load users from users.json"""
+    try:
+        if USERS_FILE.exists():
+            with open(USERS_FILE, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading users: {e}")
+    return {}
+
+def save_users(users):
+    """Save users to users.json"""
+    try:
+        USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(USERS_FILE, 'w') as f:
+            json.dump(users, f, indent=2)
+        logger.info(f"Users saved to {USERS_FILE}")
+    except Exception as e:
+        logger.error(f"Error saving users: {e}")
+
+def hash_password(password):
+    """Hash password using SHA-256"""
+    return hashlib.sha256(password.encode()).hexdigest()
 
 # Initialize clients with error handling
 try:
@@ -47,6 +77,72 @@ conversation_history = []
 def health():
     """Health check endpoint"""
     return jsonify({"status": "healthy", "service": "Research Agent Backend"})
+
+@app.route('/api/register', methods=['POST'])
+def register():
+    """Register a new user"""
+    try:
+        data = request.json
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        
+        if not username or not password:
+            return jsonify({"success": False, "message": "Username and password are required"}), 400
+        
+        if len(password) < 4:
+            return jsonify({"success": False, "message": "Password must be at least 4 characters"}), 400
+        
+        users = load_users()
+        
+        if username in users:
+            return jsonify({"success": False, "message": "Username already exists"}), 409
+        
+        # Store user with hashed password
+        users[username] = {
+            "password_hash": hash_password(password),
+            "created_at": str(__import__('datetime').datetime.now())
+        }
+        
+        save_users(users)
+        logger.info(f"New user registered: {username}")
+        
+        return jsonify({"success": True, "message": "Account created successfully"}), 201
+    except Exception as e:
+        logger.error(f"Registration error: {e}")
+        return jsonify({"success": False, "message": "Registration failed"}), 500
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    """Login a user"""
+    try:
+        data = request.json
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        
+        if not username or not password:
+            return jsonify({"success": False, "message": "Username and password are required"}), 400
+        
+        users = load_users()
+        
+        if username not in users:
+            return jsonify({"success": False, "message": "Invalid username or password"}), 401
+        
+        user_data = users[username]
+        password_hash = hash_password(password)
+        
+        if user_data.get("password_hash") != password_hash:
+            return jsonify({"success": False, "message": "Invalid username or password"}), 401
+        
+        logger.info(f"User logged in: {username}")
+        
+        return jsonify({
+            "success": True,
+            "message": "Login successful",
+            "username": username
+        }), 200
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        return jsonify({"success": False, "message": "Login failed"}), 500
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
