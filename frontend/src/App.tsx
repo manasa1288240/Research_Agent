@@ -43,19 +43,20 @@ export default function App() {
 
   return (
     <Background>
-      <LanguageSelector 
-        current={language} 
-        onSelect={setLanguage} 
-      />
-      
       {!isLoggedIn ? (
         <Login onLogin={handleLogin} />
       ) : (
-        <ResearchDashboard 
-          user={user} 
-          language={language}
-          onLogout={handleLogout} 
-        />
+        <>
+          <LanguageSelector 
+            current={language} 
+            onSelect={setLanguage} 
+          />
+          <ResearchDashboard 
+            user={user} 
+            language={language}
+            onLogout={handleLogout} 
+          />
+        </>
       )}
     </Background>
   );

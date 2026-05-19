@@ -11,8 +11,12 @@ import hashlib
 from pathlib import Path
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+logger.info("="*60)
+logger.info("Starting Research Agent Backend...")
+logger.info("="*60)
 
 # Load environment variables
 load_dotenv()
@@ -176,7 +180,7 @@ def chat():
                 search_results = tavily.search(
                     query=user_message,
                     search_depth="advanced",
-                    max_results=5
+                    max_results=15
                 )
                 
                 # Store search results into memory
@@ -206,10 +210,19 @@ User Query:
 Relevant Research Sources:
 {retrieved_context if retrieved_context else "No search results available. Please provide a general response based on your knowledge."}
 
-Please provide a comprehensive, well-structured response.
-Format your response with clear sections using markdown.
-Be factual, analytical, and professional.
-Include key findings, insights, and any relevant trends or implications."""
+Provide a DETAILED, COMPREHENSIVE response with the following:
+- Multiple well-developed sections with clear headings
+- Thorough explanations of key concepts
+- Detailed bullet points with context and explanations
+- Current trends, developments, and market state
+- Risks, challenges, limitations, and opportunities
+- Data points, statistics, and concrete examples
+- Future implications, predictions, and outlook (2-5 years)
+- Actionable insights and recommendations
+
+Format your response with clear markdown sections.
+Be thorough, professional, detailed, and analytical.
+Aim for 1000+ words of comprehensive analysis."""
         
         else:
             # Regular conversation without research
@@ -233,11 +246,11 @@ Provide a helpful, professional response."""
             response = client.chat.completions.create(
                 model="openai/gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": f"You are the {agent} agent in a multi-agent research system. Respond in {language}."},
+                    {"role": "system", "content": f"You are the {agent} agent in a multi-agent research system. Respond in {language}. Provide comprehensive, detailed, and well-structured responses with multiple sections and thorough explanations."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
-                max_tokens=2000
+                max_tokens=3500
             )
             
             assistant_message = response.choices[0].message.content
@@ -284,7 +297,7 @@ def research():
             search_results = tavily.search(
                 query=query,
                 search_depth="advanced",
-                max_results=5
+                max_results=15
             )
             
             # Store documents
@@ -299,41 +312,65 @@ def research():
             retrieved_context = "\n".join(relevant_docs) if relevant_docs else "No search results available."
             
             # Generate research report
-            prompt = f"""You are an elite AI research analyst.
+            prompt = f"""You are an elite AI research analyst specializing in comprehensive research reports.
 
-Using the provided research sources, create a professional research report.
+Using the provided research sources, create a DETAILED, PROFESSIONAL research report that covers the topic thoroughly.
 
-REQUIREMENTS:
-- Use clear markdown formatting
-- Include headings
-- Include bullet points
-- Be factual and concise
-- Mention important trends
-- Mention risks/challenges
-- Mention future implications
+CRITICAL REQUIREMENTS:
+- Provide EXTENSIVE detail and analysis
+- Use clear markdown formatting with multiple sections
+- Include detailed bullet points with explanations
+- Be factual, thorough, and comprehensive
+- Identify all important trends with explanations
+- Explain all risks/challenges in detail
+- Discuss future implications comprehensively
+- Include statistics, data points, and examples where relevant
+- Provide actionable insights and recommendations
 
-FORMAT:
+REQUIRED SECTIONS:
 
 # Research Report: {query}
 
 ## Executive Summary
+Comprehensive overview (2-3 paragraphs)
 
 ## Key Findings
+Detailed findings with bullet points and explanations
 
-## Major Insights
+## Current State & Status
+Current situation and latest developments
 
-## Challenges and Risks
+## Major Technologies/Trends
+Detailed discussion of trends with implications
 
-## Future Outlook
+## Applications & Use Cases
+Specific applications with descriptions
+
+## Market Impact & Opportunities
+Market analysis and business implications
+
+## Challenges, Risks & Limitations
+Detailed discussion of obstacles and risks
+
+## Industry Landscape
+Key players, competitions, and partnerships
+
+## Future Outlook & Predictions
+Forward-looking analysis and predictions (3-5 years)
+
+## Recommendations & Action Items
+Practical recommendations
 
 ## Final Conclusion
+Comprehensive summary of key points
 
 Research Topic:
 {query}
 
 Relevant Research Sources:
 {retrieved_context}
-"""
+
+IMPORTANT: Be thorough and detailed. Generate 2000+ words of comprehensive analysis."""
             
             if not client:
                 return jsonify({"error": "LLM not available", "success": False}), 503

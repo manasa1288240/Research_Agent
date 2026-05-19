@@ -29,11 +29,8 @@ def _initialize():
         except Exception as e:
             logger.error(f"Failed to initialize ChromaDB: {e}")
 
-# Initialize on import, but don't fail if it can't connect
-try:
-    _initialize()
-except Exception as e:
-    logger.error(f"Initialization error: {e}")
+# Do NOT initialize on import - let it be truly lazy
+# Initialization will happen on first actual use
 
 def store_documents(documents):
     """
@@ -65,7 +62,7 @@ def store_documents(documents):
     except Exception as e:
         logger.error(f"Error in store_documents: {e}")
 
-def retrieve_relevant(query, top_k=3):
+def retrieve_relevant(query, top_k=10):
     """
     Retrieve most relevant documents
     """
