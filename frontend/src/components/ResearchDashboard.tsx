@@ -281,9 +281,6 @@ export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({ user, lang
               Research Chat: <span className="text-white font-semibold">{chats.find(c => c.id === currentChatId)?.title || 'New Chat'}</span>
             </h2>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-[11px] text-slate-400 font-mono">Language: <span className="text-cyan-400 font-bold">{language}</span></div>
-          </div>
         </header>
 
         {/* Message Area */}
